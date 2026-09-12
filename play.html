@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#111111">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest-v08.webmanifest">
+<title>Копы против Самокатчиков — mobile hotfix</title>
+<style>html,body{margin:0;height:100%;background:#111;color:#fff;font-family:system-ui;display:grid;place-items:center}#s{text-align:center;padding:24px}small{opacity:.7}</style>
+</head>
+<body><div id="s"><b>Загружаю Москву…</b><br><small>Оптимизирую трафик для iPhone</small></div>
+<script>
+(async()=>{
+try{
+  let t=await fetch('./index.html?v=8',{cache:'no-store'}).then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.text()});
+  t=t.replace('manifest.webmanifest','manifest-v08.webmanifest');
+  t=t.replace(/<script>\s*if\('serviceWorker'[\s\S]*?<\/script>/,'');
+  t=t.replace("devicePixelRatio||1","window.devicePixelRatio||1");
+  t=t.replace("kind:'car',laneOffset:","kind:'car',routeDelay:rand(2.8),laneOffset:");
+  t=t.replace("laneOffset:(Math.random()<.5?-9:9),kind:'bus'","routeDelay:rand(3.2),laneOffset:(Math.random()<.5?-9:9),kind:'bus'");
+  t=t.replace("pathCooldown:rand(1),fallen:0,color:","pathCooldown:rand(1),routeDelay:rand(3.4),fallen:0,color:");
+  t=t.replace(/function updateRoadVehicle\(v,dt,now\)\{[\s\S]*?\}\nfunction updateTraffic/,
+`function updateRoadVehicle(v,dt,now){
+  if(!v.path||v.path.length<2){
+    v.routeDelay=Math.max(0,(v.routeDelay||0)-dt);v.speed+=(0-v.speed)*Math.min(1,dt*4);
+    if(v.routeDelay>0)return;
+    const st=nearestRoadCell(v.x,v.y);let g=roadCells[randi(roadCells.length)];
+    for(let tries=0;tries<12&&Math.abs(g.x-st.x)+Math.abs(g.y-st.y)<22;tries++)g=roadCells[randi(roadCells.length)];
+    v.path=(typeof aStarRoadDirected==='function'?aStarRoadDirected(st,g,2200):aStar(st,g,roadAllowed,2200));v.routeDelay=.45+rand(1.0);
+    if(!v.path||v.path.length<2)return;
+  }
+  const curr=v.path[0],next=v.path[1],wp=worldFromCell(next);let tx=wp.x,ty=wp.y;const ox=v.laneOffset||0;
+  if(next.x!==curr.x)ty+=ox;else if(next.y!==curr.y)tx+=ox;
+  const dx=tx-v.x,dy=ty-v.y,d=Math.hypot(dx,dy)||1,desired=Math.atan2(dy,dx);let da=((desired-v.angle+Math.PI*3)%(Math.PI*2))-Math.PI;
+  v.angle+=clamp(da,-2*dt,2*dt);let target=(mustStopAtLight(v,now)||carAhead(v))?0:v.max;v.speed+=(target-v.speed)*Math.min(1,dt*2.8);
+  v.vx=Math.cos(v.angle)*v.speed;v.vy=Math.sin(v.angle)*v.speed;moveRoadEntity(v,v.vx*dt,v.vy*dt);
+  if(v.blocked){v.path=[];v.routeDelay=.7+rand(.9);v.speed*=.2;return;}if(d<14)v.path.shift();
+}
+function updateTraffic`);
+  t=t.replace(/function updateNpcScooters\(dt\)\{[\s\S]*?\}\n\nfunction fallPlayer/,
+`function updateNpcScooters(dt){for(const s of npcScooters){
+  if(s.fallen>0){s.fallen-=dt;if(s.fallen<=0){s.fallen=0;s.path=[];s.pathCooldown=.2;s.routeDelay=.2+rand(.8);}continue;}
+  s.pathCooldown=Math.max(0,(s.pathCooldown||0)-dt);s.routeDelay=Math.max(0,(s.routeDelay||0)-dt);
+  if((!s.path||s.path.length<2)&&s.pathCooldown<=0&&s.routeDelay<=0){
+    const st=nearestScooterCell(s.x,s.y);let g=scooterCells[randi(scooterCells.length)];
+    for(let tries=0;tries<10&&Math.abs(g.x-st.x)+Math.abs(g.y-st.y)<18;tries++)g=scooterCells[randi(scooterCells.length)];
+    s.path=aStar(st,g,npcScooterAllowed,2200);s.pathCooldown=s.path.length>1?2+rand(2):1;s.routeDelay=.3+rand(1.1);
+  }
+  if(s.path&&s.path.length>1){const wp=worldFromCell(s.path[1]),dx=wp.x-s.x,dy=wp.y-s.y,d=Math.hypot(dx,dy)||1;s.angle=Math.atan2(dy,dx);moveCircle(s,dx/d*s.speed*dt,dy/d*s.speed*dt);if(s.blocked){fallNpcScooter(s);continue;}if(d<11)s.path.shift();}
+  for(const rv of traffic.concat(buses,policeCars))if(Math.hypot(s.x-rv.x,s.y-rv.y)<s.r+rv.r+2){fallNpcScooter(s);break;}
+  for(const o of npcScooters){if(o!==s&&o.fallen<=0&&Math.hypot(s.x-o.x,s.y-o.y)<s.r+o.r-1){fallNpcScooter(s);fallNpcScooter(o);break;}}
+}}
+
+function fallPlayer`);
+  t=t.replace(/p\.path=aStar\(s,goal,pedestrianAllowed,4200\)/g,"p.path=aStar(s,goal,pedestrianAllowed,1800)");
+  t=t.replace(/c\.path=aStar\(nearestRoadCell\(c\.x,c\.y\),targetForCar\(c\),roadAllowed,6000\)/g,"c.path=aStar(nearestRoadCell(c.x,c.y),targetForCar(c),roadAllowed,2600)");
+  t=t.replace(/resetGame\(\);let last=performance\.now\(\);function loop\(now\)\{[\s\S]*?requestAnimationFrame\(loop\);\}requestAnimationFrame\(loop\);/,
+`resetGame();let last=performance.now();function loop(now){const dt=Math.min(.033,(now-last)/1000);last=now;const maxCamX=Math.max(0,WORLD_W*TILE-innerWidth),maxCamY=Math.max(0,WORLD_H*TILE-innerHeight),camX=clamp(player.x-innerWidth/2,0,maxCamX),camY=clamp(player.y-innerHeight/2,0,maxCamY);ctx.clearRect(0,0,innerWidth,innerHeight);drawWorld(camX,camY,now);drawUI(now);update(dt,now);requestAnimationFrame(loop);}requestAnimationFrame(loop);`);
+  const dbg=`<script>window.addEventListener('error',e=>{const d=document.createElement('div');d.style='position:fixed;inset:0;z-index:999;background:#111;color:#fff;padding:20px;font:14px monospace;overflow:auto';d.textContent='Ошибка игры: '+e.message+'\\n'+(e.filename||'')+':'+e.lineno;document.body.appendChild(d)});<\/script>`;
+  t=t.replace('<script>\n(() => {',dbg+'<script>\n(() => {');
+  document.open();document.write(t);document.close();
+}catch(e){document.getElementById('s').innerHTML='<b>Не загрузилось :(</b><br><small>'+String(e)+'</small>'}
+})();
+</script></body></html>
